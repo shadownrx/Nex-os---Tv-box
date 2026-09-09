@@ -2,6 +2,8 @@
 
 Esta integración conserva el kernel y el arranque actuales. NEX-OS se compila
 como una aplicación web estática y se abre en Chromium sobre Weston/Wayland.
+Weston queda configurado sin panel ni launchers de demostración: NEX-OS es el
+escritorio visible desde el arranque.
 
 ## Preparar los archivos web
 
