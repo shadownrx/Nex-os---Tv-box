@@ -1,9 +1,11 @@
 # NEX-OS en la imagen Rockchip
 
 Esta integración conserva el kernel y el arranque actuales. NEX-OS se compila
-como una aplicación web estática y se abre en Chromium sobre Weston/Wayland.
-Weston queda configurado sin panel ni launchers de demostración: NEX-OS es el
-escritorio visible desde el arranque.
+como el shell de escritorio del dispositivo sobre Weston/Wayland. NEX-OS
+reemplaza la interfaz visible y los launchers de Chromium; Chromium queda como
+runtime gráfico interno para renderizar la aplicación web. Weston queda
+configurado sin panel ni launchers de demostración, por lo que NEX-OS es el
+único escritorio visible desde el arranque.
 
 ## Preparar los archivos web
 
@@ -25,7 +27,7 @@ En la configuración del chip deben estar habilitados:
 BR2_PACKAGE_WAYLAND=y
 BR2_PACKAGE_WESTON=y
 BR2_PACKAGE_WESTON_DRM=y
-BR2_PACKAGE_CHROMIUM_WAYLAND=y
+BR2_PACKAGE_CHROMIUM_WAYLAND=y  # runtime gráfico interno de NEX-OS
 ```
 
 Después se construye normalmente:

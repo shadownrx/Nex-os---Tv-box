@@ -5,7 +5,7 @@ Firmware Rockchip con NEX-OS integrado como escritorio principal.
 ## Arquitectura
 
 ```text
-Kernel Rockchip -> Linux/Buildroot -> Weston/Wayland -> Chromium kiosk -> NEX-OS
+Kernel Rockchip -> Linux/Buildroot -> Weston/Wayland -> NEX-OS shell
 ```
 
 El repositorio contiene tanto el SDK/firmware como el código fuente web:
@@ -16,9 +16,11 @@ El repositorio contiene tanto el SDK/firmware como el código fuente web:
 - `device/rockchip/`: perfiles de placa, overlays y scripts Rockchip.
 - `tools/nex-os/`: compilación y empaquetado de NEX-OS dentro del rootfs.
 
-Weston se configura sin panel ni launchers de demostración. Al iniciar el
-firmware, Chromium abre NEX-OS en modo kiosk y esta interfaz es el escritorio
-visible del dispositivo.
+NEX-OS reemplaza el escritorio y la interfaz visible de Chromium. Weston se
+configura sin panel ni launchers de demostración, y el dispositivo inicia
+directamente en el shell de NEX-OS. Chromium permanece únicamente como runtime
+gráfico interno para renderizar la aplicación web; el usuario no interactúa
+con un navegador separado.
 
 ## Requisitos de compilación
 
