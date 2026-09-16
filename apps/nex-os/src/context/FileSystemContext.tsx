@@ -62,7 +62,7 @@ const INITIAL_FILES: FileItem[] = [
   { id: 'nex-notepad', name: 'notepad', type: 'file', ext: 'nex', size: '12 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'notepad', title: 'Notepad' } },
   { id: 'nex-cmd', name: 'cmd', type: 'file', ext: 'nex', size: '28 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'cmd', title: 'Terminal' } },
   { id: 'nex-browser', name: 'browser', type: 'file', ext: 'nex', size: '54 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'chrome', title: 'Navegador' } },
-  { id: 'nex-code', name: 'vscode', type: 'file', ext: 'nex', size: '89 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'vscode', title: 'Visual Studio Code' } },
+  { id: 'nex-code', name: 'vscode', type: 'file', ext: 'nex', size: '89 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'vscode', title: 'Nex Code' } },
   { id: 'nex-explorer', name: 'explorer', type: 'file', ext: 'nex', size: '36 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'file-explorer', title: 'Explorador de archivos' } },
   { id: 'nex-paint', name: 'paint', type: 'file', ext: 'nex', size: '41 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'paint', title: 'Paint' } },
   { id: 'nex-calc', name: 'calc', type: 'file', ext: 'nex', size: '8 KB', modified: '10/01/2026', parentId: 'pf-nex', nexPayload: { appId: 'calculator', title: 'Calculadora' } },

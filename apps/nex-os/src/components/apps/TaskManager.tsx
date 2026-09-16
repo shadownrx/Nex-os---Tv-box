@@ -256,7 +256,7 @@ export default function TaskManager() {
       'counter-strike': { mem: 550, cpuBase: 15.0, name: 'Counter-Strike 1.6', icon: '#ffb900' },
       'control-panel': { mem: 35, cpuBase: 0.2, name: 'Configuración', icon: '#767676' },
       'devcpp-2026': { mem: 150, cpuBase: 2.0, name: 'Dev-C++', icon: '#3b82f6' },
-      'vscode': { mem: 280, cpuBase: 3.0, name: 'Visual Studio Code', icon: '#007ACC' },
+      'vscode': { mem: 280, cpuBase: 3.0, name: 'Nex Code', icon: '#007ACC' },
       'paint': { mem: 80, cpuBase: 0.5, name: 'Paint', icon: '#e74856' },
       'calculator': { mem: 20, cpuBase: 0.1, name: 'Calculadora', icon: '#0078d4' },
     };

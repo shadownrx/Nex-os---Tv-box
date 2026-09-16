@@ -4,6 +4,16 @@ Historial oficial de cambios, optimizaciones y lanzamientos del sistema operativ
 
 ---
 
+## [4.0] — Nex Code conectado al motor real (Septiembre 2026)
+
+### 💻 Nex Code
+* **[Cerrado] Nex Code sale de "planificado":** el IDE Monaco + IA (Groq) + panel Git que vive en `VsCode.tsx` ya estaba completo y enganchado en taskbar/Start/Buscar/Ejecutar/`.nex`/docs — lo que faltaba era una decisión sobre su alcance. Se cierra como "editor de código embebido en el SO", no como generador de apps instalables sin rebuild (ver Próximos Hitos abajo para esa idea más grande). ✅
+* **[Corregido] Consola de Nex Code conectada al motor real:** la terminal interna de Nex Code corría una simulación de texto fijo (`npm install` siempre imprimía "142 packages", `npm run dev` siempre el mismo puerto) desconectada del motor real que usan CMD y Terminal. Ahora corre sobre el mismo `runShellCommand` + `NexRuntimeContext` (npm/pnpm/git reales sobre el VFS): reconoce el `package.json` del workspace, corre los scripts que realmente tiene, y comparte carpeta de proyecto con el resto del SO. ✅
+* **[Corregido] `npm`/`pnpm` ahora reconocen proyectos existentes en el VFS:** antes `npm run <script>` solo funcionaba si el proyecto se había creado con `npm init` en esa misma sesión; un `package.json` ya escrito en disco (como el que Nex Code siembra al abrir un workspace) era invisible para el runtime. `getOrLoadProject` en `NexRuntimeContext` ahora lee y cachea el `package.json` del VFS cuando no hay nada en memoria. ✅
+* **[Corregido] Nombre consistente:** el lanzador `vscode.nex` y el archivo `.nex` preinstalado decían "Visual Studio Code"; ahora dicen "Nex Code" en todos lados (registro `.nex`, Explorador, Administrador de tareas). ✅
+
+---
+
 ## [V2] — Instalación y arranque más rápidos (Septiembre 2026)
 
 ### 🚀 Rendimiento en el TV box
@@ -47,8 +57,8 @@ Historial oficial de cambios, optimizaciones y lanzamientos del sistema operativ
 
 ## [Próximos Hitos] — Hacia la Beta Pública
 
-### 💻 Nex Code (Beta Release — Agosto 23)
-* **[Planificado] Nex Code** Herarramienta nueva de desarrollo, para crear apps internamente.
+### 💻 Nex Code — autoría de apps en vivo
+* **[Planificado] Registrar apps en runtime sin rebuild:** hoy un community app (SDK `@nex-os/sdk`) se registra al importarse en `src/community-apps/index.ts`, es decir, en build time. Para que Nex Code pueda "crear apps del SO" de verdad (no solo editar archivos) falta un bundler en el navegador (esbuild-wasm o similar) que compile el workspace y lo registre en el SDK registry en caliente, sin pasar por un commit + rebuild del bundle del host.
 
 ---
 

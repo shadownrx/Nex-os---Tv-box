@@ -12,7 +12,7 @@ export const NEX_EXECUTABLE_REGISTRY: Record<string, NexExecutable> = {
   'terminal.nex': { appId: 'terminal', title: 'Terminal' },
   'browser.nex': { appId: 'chrome', title: 'Navegador' },
   'chrome.nex': { appId: 'chrome', title: 'Google Chrome' },
-  'vscode.nex': { appId: 'vscode', title: 'Visual Studio Code' },
+  'vscode.nex': { appId: 'vscode', title: 'Nex Code' },
   'explorer.nex': { appId: 'file-explorer', title: 'Explorador de archivos' },
   'paint.nex': { appId: 'paint', title: 'Paint' },
   'calc.nex': { appId: 'calculator', title: 'Calculadora' },

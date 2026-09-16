@@ -9,7 +9,11 @@ import {
   searchWorkspace,
   type SearchHit,
 } from './nexcode/workspace';
-import { useNexFs } from '../../context/FileSystemContext';
+import { useFileSystem } from '../../context/FileSystemContext';
+import { useNexRuntime } from '../../context/NexRuntimeContext';
+import { useSettings } from '../../context/SettingsContext';
+import { useWindowManager } from '../../context/WindowManager';
+import { runShellCommand } from '../../runtime/shell/runCommand';
 import { joinPath } from '../../runtime/fs/paths';
 
 /** Project root on the OS VFS — shared with Terminal git/npm. */
@@ -329,7 +333,10 @@ async function callNexAI(messages: any[], { model = 'llama-3.3-70b-versatile', m
 }
 
 export default function NexCode() {
-  const nexFs = useNexFs();
+  const { files: vfsFiles, nexFs, createFolder, createFile: vfsCreateFile, deleteItem } = useFileSystem();
+  const { npmRun, pnpmRun, gitRun } = useNexRuntime();
+  const { userName } = useSettings();
+  const { openWindow } = useWindowManager();
   const [scmRefresh, setScmRefresh] = useState(0);
 
   const initialWs = useMemo(
@@ -367,6 +374,16 @@ export default function NexCode() {
     'NEX CODE · Monaco Editor listo. Ctrl+Shift+P = comandos · Ctrl+P = archivos · Ctrl+K = editar con IA.',
   ]);
   const [termInput, setTermInput] = useState('');
+  const [termRunning, setTermRunning] = useState(false);
+  // cwdId for the real shell engine, scoped to VFS_PROJECT_ROOT — resolved
+  // lazily since the folder is only created by the seed effect below.
+  const [termCwdId, setTermCwdId] = useState('');
+  useEffect(() => {
+    if (termCwdId) return;
+    const id = nexFs.idOfPath(VFS_PROJECT_ROOT);
+    if (id) setTermCwdId(id);
+  }, [termCwdId, nexFs, vfsFiles]);
+  const termCwd = nexFs.pathOfId(termCwdId) || VFS_PROJECT_ROOT;
   const termRef = useRef<HTMLDivElement>(null);
   const monacoRef = useRef<NexMonacoHandle>(null);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
@@ -670,29 +687,59 @@ export default function NexCode() {
     </script></body></html>`;
   };
 
+  // Corre el comando sobre el mismo motor de shell/npm/git que usan la
+  // Terminal y el CMD del sistema (runShellCommand + NexRuntimeContext), en
+  // vez de la simulación de texto fijo que tenía antes esta consola interna.
+  const runTermCommand = useCallback(
+    async (raw: string) => {
+      const cmd = raw.trim();
+      pushTerm([`PS ${termCwd}> ${raw}`]);
+      if (!cmd || termRunning) return;
+      setTermRunning(true);
+      try {
+        const cwdId = termCwdId || nexFs.idOfPath(VFS_PROJECT_ROOT) || 'c-drive';
+        const gen = runShellCommand(raw, {
+          files: vfsFiles,
+          nexFs,
+          cwd: termCwd,
+          cwdId,
+          userName,
+          flavor: 'cmd',
+          npmRun,
+          pnpmRun,
+          gitRun,
+          createFolder,
+          createFile: vfsCreateFile,
+          deleteItem,
+        });
+        for await (const ev of gen) {
+          if (ev.type === 'line') {
+            pushTerm([ev.text]);
+          } else if (ev.type === 'clear') {
+            clearTerminal();
+          } else if (ev.type === 'cwd') {
+            setTermCwdId(ev.dirId);
+          } else if (ev.type === 'open' && ev.appId !== 'vscode' && ev.appId !== 'nex-code') {
+            openWindow(ev.appId, ev.appId, ev.title, <span style={{ fontSize: 16 }}>💻</span>);
+          }
+        }
+        const parts = cmd.split(/\s+/);
+        const isDevScript =
+          (parts[0] === 'npm' && (parts[1] === 'start' || (parts[1] === 'run' && (parts[2] === 'dev' || parts[2] === 'start')))) ||
+          (parts[0] === 'pnpm' && (parts[1] === 'dev' || parts[1] === 'start' || (parts[1] === 'run' && (parts[2] === 'dev' || parts[2] === 'start'))));
+        if (isDevScript) setTimeout(() => setPreviewOpen(true), 400);
+      } finally {
+        setTermRunning(false);
+      }
+    },
+    [termCwd, termCwdId, vfsFiles, nexFs, userName, npmRun, pnpmRun, gitRun, createFolder, vfsCreateFile, deleteItem, openWindow, termRunning],
+  );
+
   const handleTermInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') return;
-    const cmd = termInput.trim();
-    pushTerm([`PS C:\\nex-code-app> ${cmd}`]);
+    if (e.key !== 'Enter' || termRunning) return;
+    const cmd = termInput;
     setTermInput('');
-    if (!cmd) return;
-    if (cmd.includes('run dev') || cmd === 'npm start') {
-      pushTerm(['', '> vite', '', '  VITE v5.4.2  ready in 287 ms', '', '  ➜  Local:   http://localhost:5173/']);
-      setTimeout(() => setPreviewOpen(true), 500);
-    } else if (cmd.includes('install')) {
-      pushTerm(['']);
-      setTimeout(() => pushTerm(['added 142 packages in 2.1s', '', 'found 0 vulnerabilities']), 900);
-    } else if (cmd === 'cls' || cmd === 'clear') {
-      clearTerminal();
-    } else if (cmd === 'dir' || cmd === 'ls') {
-      pushTerm(Object.keys(files).map(f => `    ${f}`));
-    } else if (cmd.startsWith('cat ') || cmd.startsWith('type ')) {
-      const target = cmd.split(' ').slice(1).join(' ').trim();
-      const full = Object.keys(files).find(f => f.toLowerCase().includes(target.toLowerCase()));
-      pushTerm(full ? files[full].content.split('\n') : [`No se encuentra: ${target}`]);
-    } else {
-      pushTerm([`'${cmd.split(' ')[0]}' no se reconoce como un comando interno o externo.`]);
-    }
+    void runTermCommand(cmd);
   };
 
   const sendChatMessage = async (text: string) => {
@@ -1432,9 +1479,10 @@ export default function NexCode() {
                     );
                   })}
                   <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ color: p.accent }}>PS C:\nex-code-app&gt;</span>
+                    <span style={{ color: p.accent }}>PS {termCwd}&gt;</span>
                     <input value={termInput} onChange={e => setTermInput(e.target.value)} onKeyDown={handleTermInput}
-                      style={{ flex: 1, background: 'transparent', border: 'none', color: p.text, outline: 'none', marginLeft: 8, fontFamily: "'Cascadia Code',Consolas,monospace", fontSize: 13 }} />
+                      disabled={termRunning} placeholder={termRunning ? 'Procesando...' : ''}
+                      style={{ flex: 1, background: 'transparent', border: 'none', color: p.text, outline: 'none', marginLeft: 8, fontFamily: "'Cascadia Code',Consolas,monospace", fontSize: 13, opacity: termRunning ? 0.5 : 1 }} />
                   </div>
                 </div>
               ) : (

@@ -89,6 +89,7 @@ interface NexRuntimeContextType {
 
   getPackages: (cwd: string) => NexPackage[];
   getProject: (cwd: string) => NexProject | null;
+  getOrLoadProject: (cwd: string) => Promise<NexProject | null>;
 
   spawnProcess: (name: string, cmd: string) => number;
   endProcess: (pid: number, status?: 'done' | 'error') => void;
@@ -178,6 +179,21 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const getProject = useCallback((cwd: string): NexProject | null => {
     return projects[cwd] ?? null;
   }, [projects]);
+
+  // getProject only knows about projects created via `npm init` this session.
+  // Nex Code (and anything else that writes package.json straight to the
+  // VFS) needs npm/pnpm to recognize an on-disk project it never saw, so
+  // fall back to reading and caching it from package.json.
+  const getOrLoadProject = useCallback(async (cwd: string): Promise<NexProject | null> => {
+    const key = normalizePath(cwd);
+    const cached = projectsRef.current[key];
+    if (cached) return cached;
+    const fromDisk = await readProjectFromFs(nexFs, key);
+    if (fromDisk) {
+      setProjects((prev) => ({ ...prev, [key]: fromDisk }));
+    }
+    return fromDisk;
+  }, [nexFs]);
 
   const initProject = useCallback(async (cwd: string, name: string) => {
     const key = normalizePath(cwd);
@@ -289,7 +305,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       case 'add': {
         if (rest.length === 0) {
           // npm install (no args) — install from package.json
-          const proj = getProject(cwd);
+          const proj = await getOrLoadProject(cwd);
           if (!proj) {
             yield 'npm warn saveError ENOENT: no such file or directory, open \'' + cwd + '\\package.json\'';
             yield 'npm notice created a lockfile as package-lock.json. You should commit this file.';
@@ -386,7 +402,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const scriptName = rest[0];
         if (!scriptName) {
           yield 'Lifecycle scripts included in project:';
-          const proj = getProject(cwd);
+          const proj = await getOrLoadProject(cwd);
           if (proj) {
             for (const [s, cmd] of Object.entries(proj.scripts)) {
               yield `  ${s}`;
@@ -397,7 +413,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
           break;
         }
-        const proj = getProject(cwd);
+        const proj = await getOrLoadProject(cwd);
         const script = proj?.scripts[scriptName];
         if (!script) {
           yield `npm error Missing script: "${scriptName}"`;
@@ -449,7 +465,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // ── npm list / ls ─────────────────────────────────────────────────
       case 'list':
       case 'ls': {
-        const proj = getProject(cwd);
+        const proj = await getOrLoadProject(cwd);
         const pkgs = getPackages(cwd);
         const name = proj?.name ?? cwd.split('\\').pop() ?? 'project';
         const version = proj?.version ?? '1.0.0';
@@ -550,7 +566,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // ── pnpm install ──────────────────────────────────────────────────
       case 'install':
       case 'i': {
-        const proj = getProject(cwd);
+        const proj = await getOrLoadProject(cwd);
         const deps = { ...proj?.dependencies ?? {}, ...proj?.devDependencies ?? {} };
         const depNames = Object.keys(deps);
         if (depNames.length === 0) {
@@ -598,7 +614,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           yield `Progress: resolved ${Math.floor(Math.random() * 50 + 20)}, reused ${Math.floor(Math.random() * 10)}, downloaded ${pkgNames.indexOf(name) + 1}, added ${pkgNames.indexOf(name) + 1}`;
           const pkg: NexPackage = { name, ...meta, isDev };
           addPkg(cwd, pkg);
-          const proj = getProject(cwd);
+          const proj = await getOrLoadProject(cwd);
           if (proj) addProjectDep(cwd, pkg, isDev);
         }
 
@@ -633,7 +649,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // ── pnpm run ──────────────────────────────────────────────────────
       case 'run': {
         const scriptName = rest[0];
-        const proj = getProject(cwd);
+        const proj = await getOrLoadProject(cwd);
         const script = proj?.scripts[scriptName];
         if (!script) {
           yield ` ERR_PNPM_NO_SCRIPT  Missing script: "${scriptName}"`;
@@ -667,7 +683,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       case 'list':
       case 'ls': {
         const pkgs = getPackages(cwd);
-        const proj = getProject(cwd);
+        const proj = await getOrLoadProject(cwd);
         yield `Legend: production dependency, optional only, dev only`;
         yield '';
         yield `${proj?.name ?? cwd.split('\\').pop()} ${proj?.version ?? '1.0.0'} ${cwd}`;
@@ -804,6 +820,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       resolveNex,
       getPackages,
       getProject,
+      getOrLoadProject,
       spawnProcess,
       endProcess,
       listProcesses,
@@ -818,6 +835,7 @@ export const NexRuntimeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       resolveNex,
       getPackages,
       getProject,
+      getOrLoadProject,
       spawnProcess,
       endProcess,
       listProcesses,
