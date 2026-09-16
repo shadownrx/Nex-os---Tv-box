@@ -4,6 +4,16 @@ Historial oficial de cambios, optimizaciones y lanzamientos del sistema operativ
 
 ---
 
+## [V2] — Instalación más rápida (Septiembre 2026)
+
+### ⚙️ Build & Deploy
+* **[Optimizado] `tools/nex-os/build.sh` evita reinstalar dependencias innecesariamente:** el script ahora compara un hash de `package-lock.json` contra la última instalación (`node_modules/.install-stamp`) y omite `npm ci` cuando no cambió nada, en lugar de reinstalar todo el árbol de dependencias en cada compilación del firmware. ✅
+* **[Optimizado] Flags de npm más rápidos:** cuando sí hace falta instalar, se usa `npm ci --prefer-offline --no-audit --no-fund` para evitar chequeos de red innecesarios (auditoría de seguridad y mensajes de funding) en cada build. ✅
+* **[Agregado] `.npmrc` con `prefer-offline`, `audit=false` y `fund=false`:** acelera también `npm install`/`npm ci` manuales durante el desarrollo local, reutilizando la caché de npm en vez de golpear el registro en cada corrida. ✅
+* **[Confirmado] ccache activo en Buildroot:** se verificó que `BR2_CCACHE=y` ya está habilitado en la configuración base compartida por todos los perfiles Rockchip (`buildroot/configs/rockchip/base/common.config`), y que kernel y paquetes ya compilan en paralelo (`-j$(nproc)+1` / `BR2_JLEVEL=0`). Las recompilaciones incrementales del firmware reutilizan el caché de compilador sin tocar nada del rootfs/kernel actual.
+
+---
+
 ## [Season 4] — Desarrollo Actual (Junio 2026)
 
 ### ✨ Nex Assistant

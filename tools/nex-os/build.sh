@@ -20,7 +20,20 @@ if [ ! -f "$SOURCE_DIR/package.json" ]; then
 	fi
 fi
 
-npm --prefix "$SOURCE_DIR" ci
+LOCK_FILE="$SOURCE_DIR/package-lock.json"
+INSTALL_STAMP="$SOURCE_DIR/node_modules/.install-stamp"
+NPM_FLAGS="--prefer-offline --no-audit --no-fund"
+
+if [ -f "$LOCK_FILE" ] && [ -f "$INSTALL_STAMP" ] && \
+	[ "$(cat "$INSTALL_STAMP")" = "$(sha256sum "$LOCK_FILE" | cut -d' ' -f1)" ]; then
+	printf 'Dependencies already match package-lock.json, skipping npm ci\n'
+else
+	npm --prefix "$SOURCE_DIR" ci $NPM_FLAGS
+	if [ -f "$LOCK_FILE" ]; then
+		sha256sum "$LOCK_FILE" | cut -d' ' -f1 > "$INSTALL_STAMP"
+	fi
+fi
+
 npm --prefix "$SOURCE_DIR" run build
 
 rm -rf "$OUTPUT_DIR"

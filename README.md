@@ -44,6 +44,13 @@ find device/rockchip/.chips -type f -name '*defconfig' | sort
 overlay del rootfs. `node_modules`, `dist` y la caché de fuentes no se
 versionan.
 
+Desde la V2, el script reutiliza `node_modules` entre compilaciones: solo
+corre `npm ci` cuando cambia `package-lock.json` (comparando un hash guardado
+en `node_modules/.install-stamp`), lo que evita reinstalar dependencias en
+cada build del firmware. La compilación del kernel y de Buildroot ya usa
+`ccache` y paralelismo por defecto (`BR2_CCACHE=y`, `BR2_JLEVEL=0`), así que
+las recompilaciones incrementales son notablemente más rápidas.
+
 La imagen final se genera en:
 
 ```text
