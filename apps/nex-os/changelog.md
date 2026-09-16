@@ -4,7 +4,14 @@ Historial oficial de cambios, optimizaciones y lanzamientos del sistema operativ
 
 ---
 
-## [V2] — Instalación más rápida (Septiembre 2026)
+## [V2] — Instalación y arranque más rápidos (Septiembre 2026)
+
+### 🚀 Rendimiento en el TV box
+* **[Optimizado] Chromium kiosk con aceleración por GPU:** `S99nex-os` ahora lanza Chromium con `--use-gl=egl --ignore-gpu-blocklist --enable-gpu-rasterization --enable-oop-rasterization --enable-zero-copy --enable-accelerated-video-decode`, evitando el fallback a renderizado por software (SwiftShader) al que Chromium recurre por defecto en GPUs Mali no reconocidas — la causa más común de lentitud en kiosks Rockchip. ✅
+* **[Optimizado] Menos trabajo en segundo plano:** se deshabilitan `background-networking`, `background-timer-throttling`, `backgrounding-occluded-windows`, `renderer-backgrounding`, `component-update`, `sync` y `translate`, innecesarios en una sesión kiosk de una sola pestaña siempre en primer plano. ✅
+* **[Optimizado] Caché de disco acotada:** `--disk-cache-size=104857600` fija el caché de Chromium en ~100MB en vez de dejar que se auto-dimensione según el espacio libre del almacenamiento eMMC/flash. ✅
+* **[Agregado] `RK_NEX_OS_CHROMIUM_FLAGS` configurable:** las flags de Chromium se pueden sobrescribir por placa desde `/etc/default/nex-os` sin tocar el script. ✅
+* **[Optimizado] Arranque del shell:** el sondeo del socket de Wayland bajó de 1s a 0.2s por intento, reduciendo la espera antes de lanzar Chromium una vez que Weston está listo. ✅
 
 ### ⚙️ Build & Deploy
 * **[Optimizado] `tools/nex-os/build.sh` evita reinstalar dependencias innecesariamente:** el script ahora compara un hash de `package-lock.json` contra la última instalación (`node_modules/.install-stamp`) y omite `npm ci` cuando no cambió nada, en lugar de reinstalar todo el árbol de dependencias en cada compilación del firmware. ✅

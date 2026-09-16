@@ -22,6 +22,12 @@ directamente en el shell de NEX-OS. Chromium permanece únicamente como runtime
 gráfico interno para renderizar la aplicación web; el usuario no interactúa
 con un navegador separado.
 
+Chromium arranca en modo kiosk (`device/rockchip/common/overlays/rootfs/nex-os/S99nex-os`)
+con aceleración por GPU (EGL/Mali), decodificación de video por hardware
+(RKMPP) y trabajo en segundo plano deshabilitado, ya que solo corre una
+pestaña en primer plano. Para ajustar esas flags en una placa puntual, definí
+`RK_NEX_OS_CHROMIUM_FLAGS` en `/etc/default/nex-os` dentro de la imagen.
+
 ## Requisitos de compilación
 
 - Linux x86_64.
