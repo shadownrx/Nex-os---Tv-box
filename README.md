@@ -79,3 +79,28 @@ conectividad de red en el dispositivo. El backend opcional de música está en
 `apps/nex-os/server/` y no forma parte del firmware kiosk por defecto.
 
 Para más detalles consulta [tools/nex-os/README.md](tools/nex-os/README.md).
+
+## Plataformas adicionales
+
+Rockchip conserva el flujo anterior. La preparación inicial HiSilicon se
+consulta con:
+
+```sh
+./build.sh --soc hi3798mv300h --board juw7.820.00218613 show-config
+./build.sh --soc hi3798mv300h --board juw7.820.00218613 check
+```
+
+El segundo comando falla intencionalmente: faltan BSP y datos validados de
+la placa. Hi3798MV300H es una variante probable pendiente de boot log.
+Consulta [el análisis y plan del port](docs/platforms/hisilicon-hi3798mv300h.md).
+
+## NEX - OS Installer
+
+```sh
+./nex         # asistente ASCII
+./nex targets # catálogo de plataformas y perfiles
+```
+
+El CLI reúne diagnóstico, selección y build. `install --dry-run` prepara un
+plan de instalación; la escritura al dispositivo sigue deshabilitada durante
+esta fase. Consulta [los comandos y requisitos](tools/nex/README.md).
