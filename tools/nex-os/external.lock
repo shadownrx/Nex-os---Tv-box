@@ -1,0 +1,14 @@
+# Partes del SDK Linux de Rockchip que Buildroot toma de external/ y no están en git.
+# Fuente: snapshot público del SDK de Geniatech (marzo 2025), cada una fijada a un commit.
+# Formato: <directorio en external/> <repositorio> <commit>
+# Uso: tools/nex-os/fetch-external.sh
+alsa-config  https://github.com/geniatech666/alsa-config.git  a853d8c9056cc10d3339655fd42203347a1872c1
+chromium     https://github.com/geniatech666/chromium.git     08a4998d1231cf11d462e3ed31036d51387c6c19
+libmali      https://github.com/geniatech666/libmali.git      65b68b65c9655d4202668f576822efbcab008b98
+linux-rga    https://github.com/geniatech666/linux-rga.git    6e7d11925fce82c872c6b146cffa053f3bea072f
+mpp          https://github.com/geniatech666/mpp.git          d8d1bab1c3f06656e92cd80899b4adcfce051dbb
+recovery     https://github.com/geniatech666/recovery.git     74526cc7b3ed6b7cfa050245197b0ed8fd250a6c
+rkscript     https://github.com/geniatech666/rkscript.git     1d61171e34ca93809f1a74eddae30e39c901c9e0
+rktoolkit    https://github.com/geniatech666/rktoolkit.git    157377aa86e825ea6ca39ed33fac975a44c79c45
+rkupdate     https://github.com/geniatech666/rkupdate.git     5000d22947c938ffe162cba774f5d864d4499c9d
+rkwifibt     https://github.com/geniatech666/rkwifibt.git     2c6d2d54923c4a6dd862781faaa0a5b91662b5ff

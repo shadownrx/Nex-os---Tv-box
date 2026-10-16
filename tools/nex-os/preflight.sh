@@ -43,9 +43,9 @@ fi
 
 echo "== Partes del SDK Rockchip fuera de git (external/)"
 # Paquetes que la imagen de TV box usa sí o sí (Buildroot los toma de external/).
-for d in chromium libmali mpp linux-rga gstreamer-rockchip rkwifibt rkscript alsa-config recovery rkupdate; do
+for d in $(grep -Ev '^\s*(#|$)' "$SDK_DIR/tools/nex-os/external.lock" | awk '{print $1}'); do
 	[ -d "$SDK_DIR/external/$d" ] && ok "external/$d" ||
-		bad "falta external/$d (viene con el SDK Linux de Rockchip V1.2.0, mismo release que este kernel 5.10)"
+		bad "falta external/$d: copiarlo del SDK oficial V1.2.0 o correr tools/nex-os/fetch-external.sh"
 done
 ls "$SDK_DIR"/external/chromium/chromium-ozone-wayland_*_aarch64.tar.xz* >/dev/null 2>&1 &&
 	ok "Chromium aarch64 precompilado" ||

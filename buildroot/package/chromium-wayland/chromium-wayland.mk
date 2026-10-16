@@ -9,7 +9,9 @@ else
 CHROMIUM_WAYLAND_ARCH = armhf
 endif
 
-CHROMIUM_WAYLAND_VERSION = 122.0.6261.128
+# 114: snapshot de prueba de tools/nex-os/external.lock. Con el external/ del SDK
+# oficial V1.2.0 volver a 122.0.6261.128 (los dos hashes están en el .hash).
+CHROMIUM_WAYLAND_VERSION = 114.0.5735.198
 CHROMIUM_WAYLAND_SITE = $(TOPDIR)/../external/chromium
 CHROMIUM_WAYLAND_SOURCE = chromium-ozone-wayland_$(CHROMIUM_WAYLAND_VERSION)_$(CHROMIUM_WAYLAND_ARCH).tar.xz
 CHROMIUM_WAYLAND_SITE_METHOD = file

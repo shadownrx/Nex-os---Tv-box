@@ -1,0 +1,146 @@
+# Compila el firmware del TV box (RK3318/RK3328) y deja update.img como artifact.
+#
+# Variables del repo (Settings → Secrets and variables → Actions → Variables), todas públicas:
+#   NEX_MDM_URL, NEX_MDM_ANON_KEY, NEX_ADMIN_URL
+#   NEX_MDM_SIGN_PUBKEY, NEX_RELEASE_PUBKEY: una o más claves públicas PEM pegadas una tras otra
+# Sin NEX_MDM_URL se compila una imagen de prueba sin gestión remota (NEX_MDM=0).
+#
+# external/ sale de tools/nex-os/external.lock (snapshot de prueba). Para las imágenes
+# de producción usar el external/ del SDK oficial V1.2.0 (ver docs/INSTALACION_TALLER.md).
+name: Firmware TV box
+
+on:
+  workflow_dispatch:
+    inputs:
+      perfil:
+        description: "prod (endurecida) o dev (ADB y consola, para la unidad piloto)"
+        type: choice
+        options: [dev, prod]
+        default: dev
+  push:
+    branches: [feat/ci-firmware-build]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    env:
+      PERFIL: ${{ inputs.perfil || 'dev' }}
+      SDK: /mnt/sdk
+    steps:
+      - name: Liberar disco
+        run: |
+          df -h / /mnt
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift /usr/local/share/powershell
+          sudo docker image prune -af >/dev/null
+          sudo swapoff -a && sudo rm -f /mnt/swapfile
+          sudo mkdir -p "$SDK" && sudo chown "$(id -u):$(id -g)" "$SDK"
+          df -h / /mnt
+
+      - name: Dependencias del host
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq git ssh make gcc g++ gcc-multilib g++-multilib libssl-dev \
+            liblz4-tool lz4 zstd expect expect-dev patchelf chrpath gawk texinfo diffstat \
+            binfmt-support qemu-user-static live-build bison flex fakeroot cmake unzip \
+            device-tree-compiler libncurses-dev bzip2 expat gpgv2 cpp-aarch64-linux-gnu \
+            libgmp-dev libmpc-dev bc python-is-python3 python2 rsync scons debootstrap cpio \
+            file time >/dev/null
+
+      - name: Checkout (sin historia, en /mnt)
+        run: |
+          git init -q "$SDK"
+          git -C "$SDK" fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA"
+          git -C "$SDK" -c advice.detachedHead=false checkout -q FETCH_HEAD
+          du -sh "$SDK"
+
+      - name: external/ del SDK
+        run: "$SDK/tools/nex-os/fetch-external.sh"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Caché de descargas de Buildroot
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: /mnt/sdk/buildroot/dl
+          key: br-dl-${{ hashFiles('buildroot/configs/rockchip_rk3328_nex_defconfig') }}-${{ github.run_id }}
+          restore-keys: br-dl-
+
+      - name: UI de NEX-OS
+        env:
+          NEX_MDM_URL: ${{ vars.NEX_MDM_URL }}
+          NEX_MDM_ANON_KEY: ${{ vars.NEX_MDM_ANON_KEY }}
+          NEX_ADMIN_URL: ${{ vars.NEX_ADMIN_URL }}
+          MDM_SIGN_PEMS: ${{ vars.NEX_MDM_SIGN_PUBKEY }}
+          RELEASE_PEMS: ${{ vars.NEX_RELEASE_PUBKEY }}
+        run: |
+          cd "$SDK"
+          # Cada clave PEM de la variable va a su propio archivo; build.sh los recibe con ":".
+          split_pems() { # <texto> <prefijo>
+            printf '%s\n' "$1" | awk -v p="$2" '/BEGIN/{n++} n{print > (p n ".pem")}'
+            ls "$2"*.pem 2>/dev/null | paste -sd: -
+          }
+          mkdir -p "$RUNNER_TEMP/keys"
+          if [ -n "$NEX_MDM_URL" ]; then
+            export NEX_MDM_SIGN_PUBKEY=$(split_pems "$MDM_SIGN_PEMS" "$RUNNER_TEMP/keys/mdm")
+            export NEX_RELEASE_PUBKEY=$(split_pems "$RELEASE_PEMS" "$RUNNER_TEMP/keys/release")
+            echo "IMAGEN=mdm" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Sin la variable NEX_MDM_URL: imagen de prueba SIN gestión remota"
+            export NEX_MDM=0
+            echo "NEX_MDM=0" >> "$GITHUB_ENV"
+            echo "IMAGEN=sin-mdm" >> "$GITHUB_ENV"
+          fi
+          tools/nex-os/build.sh
+          tools/nex-os/preflight.sh
+
+      - name: Firmware
+        run: |
+          cd "$SDK"
+          case "$PERFIL" in
+            prod) cfg=rockchip_rk3328_nex_tvbox_defconfig ;;
+            *) cfg=rockchip_rk3328_nex_tvbox_dev_defconfig ;;
+          esac
+          ./build.sh chip rk3328 "$cfg"
+          ./build.sh all
+          ./build.sh updateimg
+          df -h /mnt
+
+      - name: Resultado
+        if: success()
+        run: |
+          cd "$SDK/output/firmware"
+          ls -la
+          sha256sum update.img | tee update.img.sha256
+          echo "### update.img ($PERFIL, $IMAGEN)" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$(cut -c1-64 update.img.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: success()
+        with:
+          name: nex-tvbox-${{ env.PERFIL }}-${{ env.IMAGEN }}-${{ github.run_number }}
+          path: |
+            /mnt/sdk/output/firmware/update.img
+            /mnt/sdk/output/firmware/update.img.sha256
+            /mnt/sdk/output/firmware/MiniLoaderAll.bin
+          retention-days: 14
+          compression-level: 0
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: logs-${{ github.run_number }}
+          path: |
+            /mnt/sdk/output/log
+            /mnt/sdk/output/sessions
+          retention-days: 7

@@ -71,7 +71,24 @@ el control original envía esas teclas. Si no las envía, hay que cargar el mapa
 
 ## 2. Preparar la imagen
 
-En un PC Linux x86_64 con el SDK, desde la raíz del repositorio:
+`external/` (Chromium, driver de GPU, Wi-Fi, decodificador de video, recovery) no está en git:
+
+- **Producción:** copiarlo del SDK Linux oficial de Rockchip V1.2.0 (lo da el fabricante o el
+  distribuidor) y volver Chromium a la 122 en `buildroot/package/chromium-wayland/chromium-wayland.mk`.
+- **Pruebas:** `tools/nex-os/fetch-external.sh` lo baja de un snapshot público de terceros
+  (`tools/nex-os/external.lock`). No usar esas imágenes para equipos que se venden.
+
+### Opción A: GitHub Actions (sin PC Linux)
+
+En GitHub, pestaña **Actions** → **Firmware TV box** → **Run workflow**, elegir `dev` o `prod`.
+Tarda unas horas; el `update.img` queda en el artifact de la corrida (14 días). Las URLs y claves
+públicas del MDM se cargan una vez en **Settings → Secrets and variables → Actions → Variables**
+(`NEX_MDM_URL`, `NEX_MDM_ANON_KEY`, `NEX_ADMIN_URL`, `NEX_MDM_SIGN_PUBKEY`, `NEX_RELEASE_PUBKEY`).
+Sin `NEX_MDM_URL` sale una imagen de prueba sin gestión remota. Usa el snapshot de prueba de `external/`.
+
+### Opción B: PC Linux x86_64
+
+Con el SDK, desde la raíz del repositorio:
 
 ```sh
 ./build.sh rk3328:rockchip_rk3328_nex_tvbox_defconfig
