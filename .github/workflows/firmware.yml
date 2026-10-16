@@ -101,8 +101,8 @@ jobs:
             echo "NEX_MDM=0" >> "$GITHUB_ENV"
             echo "IMAGEN=sin-mdm" >> "$GITHUB_ENV"
           fi
-          tools/nex-os/build.sh
-          tools/nex-os/preflight.sh
+          bash tools/nex-os/build.sh
+          bash tools/nex-os/preflight.sh
 
       - name: Firmware
         run: |
