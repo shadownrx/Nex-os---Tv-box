@@ -91,7 +91,7 @@ Sin `NEX_MDM_URL` sale una imagen de prueba sin gestión remota. Usa el snapshot
 Con el SDK, desde la raíz del repositorio:
 
 ```sh
-./build.sh rk3328:rockchip_rk3328_nex_tvbox_defconfig
+./build.sh chip:rk3328:rockchip_rk3328_nex_tvbox_defconfig
 
 NEX_MDM_URL=https://<proyecto>.supabase.co \
 NEX_MDM_ANON_KEY=<clave pública de Supabase> \

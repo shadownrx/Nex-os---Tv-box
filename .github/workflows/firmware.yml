@@ -31,6 +31,9 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash # -eo pipefail
     env:
       PERFIL: ${{ inputs.perfil || 'dev' }}
       SDK: /mnt/sdk
@@ -111,10 +114,14 @@ jobs:
             prod) cfg=rockchip_rk3328_nex_tvbox_defconfig ;;
             *) cfg=rockchip_rk3328_nex_tvbox_dev_defconfig ;;
           esac
-          ./build.sh chip rk3328 "$cfg"
+          # build.sh del SDK sale con 0 aunque falle: se verifica cada resultado.
+          ./build.sh "chip:rk3328:$cfg"
+          [ "$(basename "$(readlink -f output/defconfig)")" = "$cfg" ] ||
+            { echo "::error::no se seleccionó $cfg"; exit 1; }
           ./build.sh all
           ./build.sh updateimg
           df -h /mnt
+          [ -s output/firmware/update.img ] || { echo "::error::no se generó update.img (ver logs)"; exit 1; }
 
       - name: Resultado
         if: success()
