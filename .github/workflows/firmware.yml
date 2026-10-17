@@ -56,7 +56,7 @@ jobs:
             binfmt-support qemu-user-static live-build bison flex fakeroot cmake unzip \
             device-tree-compiler libncurses-dev bzip2 expat gpgv2 cpp-aarch64-linux-gnu \
             libgmp-dev libmpc-dev bc python-is-python3 python2 rsync scons debootstrap cpio \
-            file time >/dev/null
+            file time python3-dev swig python3-pyelftools libelf-dev >/dev/null
 
       - name: Checkout (sin historia, en /mnt)
         run: |
