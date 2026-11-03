@@ -52,14 +52,8 @@ object Demo {
             // Solo apps que tienen sentido en un TV (sin calculadora, fotos de ejemplo, reloj ni calendario).
             .put("apps", JSONArray()
                 .put(web("youtube", "YouTube", "https://www.youtube.com/tv",
-                    "youtube.com", "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com"))
-                .put(internal("nexreproductor", "NexReproductor"))
-                .put(internal("games", "Juegos")))
+                    "youtube.com", "googlevideo.com", "ytimg.com", "ggpht.com", "gstatic.com")))
     }
-
-    private fun internal(id: String, name: String) =
-        JSONObject().put("id", id).put("name", name).put("kind", "internal").put("launch_url", JSONObject.NULL)
-            .put("domains", JSONArray())
 
     private fun web(id: String, name: String, url: String, vararg domains: String) =
         JSONObject().put("id", id).put("name", name).put("kind", "web").put("launch_url", url)
@@ -73,6 +67,11 @@ object Demo {
 class DemoReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!BuildConfig.DEMO || intent.action != Demo.ACTION) return
+        intent.getStringExtra("update")?.let { text ->
+            runCatching { Updater.offerDemo(context, JSONObject(text)) }
+                .onFailure { Log.w("nex-demo", "update inválido", it) }
+            return
+        }
         val state = intent.getStringExtra("state") ?: return
         if (state !in Demo.STATES) {
             Log.w("nex-demo", "escenario desconocido: $state (opciones: ${Demo.STATES})")

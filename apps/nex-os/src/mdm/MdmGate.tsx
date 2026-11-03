@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import WifiScreen from './WifiScreen';
 import qrcode from 'qrcode-generator';
 import AppRegistry from '../components/AppRegistry';
 import { useAgentState, type MdmApp, type MdmState } from './agentState';
@@ -11,8 +12,6 @@ import { useAgentState, type MdmApp, type MdmState } from './agentState';
 
 /** Apps internas que pueden mostrarse en modo TV. Terminal, navegador libre, NEX Code, ajustes, etc. nunca. */
 const TV_SAFE_INTERNAL = new Set([
-  'nexreproductor',
-  'spotify',
   'mediaplayer',
   'media-player',
   'photos',
@@ -20,10 +19,6 @@ const TV_SAFE_INTERNAL = new Set([
   'calculator',
   'clock',
   'calendar',
-  'tetris',
-  'nex-tetris',
-  'games',
-  'nex-games',
 ]);
 
 const BACK_KEYS = new Set(['Escape', 'Backspace', 'BrowserBack', 'GoBack']);
@@ -62,8 +57,16 @@ function iconKey(app: { id: string; name: string }): string | null {
 
 const ICON_SIZE = { sm: 'h-7 w-7', md: 'h-10 w-10', lg: 'h-20 w-20' } as const;
 const LETTER_SIZE = { sm: 'text-3xl', md: 'text-4xl', lg: 'text-7xl' } as const;
+// El ícono real de una app llena más el círculo que uno de línea.
+const IMAGE_SIZE = { sm: 'h-12 w-12', md: 'h-14 w-14', lg: 'h-28 w-28' } as const;
 
-function AppIcon({ app, size = 'md' }: { app: { id: string; name: string }; size?: keyof typeof ICON_SIZE }) {
+function AppIcon({ app, size = 'md' }: { app: { id: string; name: string; icon?: string | null }; size?: keyof typeof ICON_SIZE }) {
+  // Si la imagen falla (por ejemplo, la app se desinstaló), vuelve al ícono de línea.
+  const [failed, setFailed] = useState<string | null>(null);
+  const src = app.icon;
+  if (src && src !== failed) {
+    return <img src={src} alt="" className={`${IMAGE_SIZE[size]} object-contain`} onError={() => setFailed(src)} />;
+  }
   const key = iconKey(app);
   if (!key) {
     return <span className={LETTER_SIZE[size]}>{app.name.charAt(0).toUpperCase()}</span>;
@@ -123,7 +126,7 @@ function Brand({ state, size = 'lg' }: { state: MdmState; size?: 'lg' | 'sm' }) 
   }
   return (
     <div className={`${size === 'lg' ? 'text-5xl' : 'text-xl'} font-bold tracking-widest`}>
-      {state.companyName ?? 'NEX OS'}
+      {state.companyName ?? 'NEX TV'}
     </div>
   );
 }
@@ -136,12 +139,76 @@ function FullScreen({ children }: { children: ReactNode }) {
   );
 }
 
+function WifiEntry({ state, label = 'Configurar Wi-Fi' }: { state: MdmState; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => { setOpen(false); button.current?.focus(); }, []);
+  useEffect(() => { if (label === 'Configurar Wi-Fi') button.current?.focus(); }, [label]);
+  return <>
+    <button ref={button} data-index="4" onClick={() => setOpen(true)} className="text-xl rounded-xl px-5 py-3 mt-4 border border-white/20 outline-none focus:bg-white/20 focus:ring-2 focus:ring-sky-300">{label}</button>
+    {open && <WifiScreen token={state.wifiToken} onClose={close} />}
+  </>;
+}
+
+/** Activación de NEX con root (sin ADB): PIN de técnico y luego `dpm` en el equipo. */
+function RootSetup({ state }: { state: MdmState }) {
+  const button = useRef<HTMLButtonElement>(null);
+  const [step, setStep] = useState<'idle' | 'pin' | 'busy'>('idle');
+  const [message, setMessage] = useState('');
+  const cancel = useCallback(() => { setStep('idle'); window.setTimeout(() => button.current?.focus(), 0); }, []);
+  const activate = useCallback(async () => {
+    setStep('busy');
+    setMessage('Activando… si aparece un cartel de root, aceptalo.');
+    try {
+      const res = await fetch(`/agent/setup/root?token=${encodeURIComponent(state.wifiToken ?? '')}`, { cache: 'no-store' });
+      const data = await res.json();
+      // Si sale bien, NEX TV se reabre solo en modo protegido.
+      setMessage(data.ok ? 'NEX activado. Reiniciando la pantalla…' : data.error || 'No se pudo activar NEX.');
+    } catch {
+      setMessage('No se pudo activar NEX.');
+    }
+    setStep('idle');
+    window.setTimeout(() => button.current?.focus(), 0);
+  }, [state.wifiToken]);
+
+  if (step === 'pin') {
+    return <div className="fixed inset-0 z-50"><TechPin onOk={() => void activate()} onCancel={cancel} /></div>;
+  }
+  return <>
+    <button ref={button} disabled={step === 'busy'} onClick={() => { setMessage(''); setStep('pin'); }} className="text-xl rounded-xl px-5 py-3 border border-amber-300/40 text-amber-100 outline-none focus:bg-white/20 focus:ring-2 focus:ring-sky-300">
+      Activar NEX (técnico)
+    </button>
+    {message && <p role="status" className="text-lg text-amber-100">{message}</p>}
+  </>;
+}
+
+/** Acciones de las pantallas sin escritorio: activar NEX (si falta) y Wi-Fi, con flechas arriba/abajo. */
+function SetupActions({ state }: { state: MdmState }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const move = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const btns = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>(':scope > button:not(:disabled)') ?? []);
+    const cur = btns.findIndex((b) => b === document.activeElement);
+    if (cur < 0) return;
+    e.preventDefault();
+    btns[Math.min(Math.max(cur + (e.key === 'ArrowDown' ? 1 : -1), 0), btns.length - 1)]?.focus();
+  };
+  return (
+    <div ref={ref} onKeyDown={move} className="flex flex-col items-center space-y-3">
+      {!state.owner && <p className="text-white/50">Instalación incompleta: NEX todavía no protege este equipo.</p>}
+      {!state.owner && state.root && <RootSetup state={state} />}
+      <WifiEntry state={state} />
+    </div>
+  );
+}
+
 function StartingScreen({ state }: { state: MdmState }) {
   return (
     <FullScreen>
       <Brand state={state} />
       <div className="h-10 w-10 rounded-full border-4 border-white/15 border-t-white animate-spin" />
       <p className="text-white/60 text-lg">Iniciando el equipo…</p>
+      <SetupActions state={state} />
     </FullScreen>
   );
 }
@@ -193,6 +260,7 @@ function PairingScreen({ state }: { state: MdmState }) {
           </p>
         )}
       </div>
+      <SetupActions state={state} />
     </FullScreen>
   );
 }
@@ -219,6 +287,7 @@ function LockScreen({ state }: { state: MdmState }) {
         {detail && <p className="text-lg text-white/50">{detail}</p>}
       </div>
       {state.deviceName && <p className="text-white/30 text-sm">Equipo: {state.deviceName}</p>}
+      <WifiEntry state={state} />
     </FullScreen>
   );
 }
@@ -238,7 +307,7 @@ function formatDue(date: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' });
 }
 
-/** Versión de NEX-OS mostrada en Ajustes (se define al compilar la imagen). */
+/** Versión de NEX TV mostrada en Ajustes (se define al compilar la imagen). */
 const NEX_VERSION = (import.meta.env.VITE_NEX_VERSION as string | undefined) ?? '0.1';
 
 /** PIN del acceso técnico (se define al compilar; por defecto, solo para demo). */
@@ -373,6 +442,17 @@ function TechPin({ onOk, onCancel }: { onOk: () => void; onCancel: () => void })
 /** Panel técnico (tras el PIN): diagnóstico del equipo y acciones de servicio. */
 function TechPanel({ state, onClose }: { state: MdmState; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [message, setMessage] = useState('');
+  // Sin Device Owner, Guard devuelve al inicio cualquier app no permitida: esto le da al técnico unos minutos.
+  const openAndroidSettings = useCallback(async () => {
+    try {
+      const res = await fetch(`/agent/setup/settings?token=${encodeURIComponent(state.wifiToken ?? '')}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!data.ok) setMessage('No se pudieron abrir los Ajustes de Android.');
+    } catch {
+      setMessage('No se pudieron abrir los Ajustes de Android.');
+    }
+  }, [state.wifiToken]);
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>('button[data-index="0"]')?.focus();
     const onKey = (e: KeyboardEvent) => {
@@ -410,7 +490,7 @@ function TechPanel({ state, onClose }: { state: MdmState; onClose: () => void })
           <h2 className="text-sky-300 text-lg uppercase tracking-widest mb-2">Equipo</h2>
           <SettingsRow label="Nombre" value={state.deviceName ?? 'Sin nombre'} />
           <SettingsRow label="Proveedor" value={state.companyName ?? 'NEX'} />
-          <SettingsRow label="NEX-OS" value={`v${NEX_VERSION}`} />
+          <SettingsRow label="NEX TV" value={`v${NEX_VERSION}`} />
           <SettingsRow label="Modo" value={<span className="text-emerald-300">Activo</span>} />
           <SettingsRow label="Conexión" value={<span className={navigator.onLine ? 'text-emerald-300' : 'text-amber-300'}>{navigator.onLine ? 'En línea' : 'Sin conexión'}</span>} />
         </section>
@@ -420,6 +500,12 @@ function TechPanel({ state, onClose }: { state: MdmState; onClose: () => void })
           <button data-index="1" onClick={() => window.location.reload()} className="w-full text-left rounded-xl bg-white/5 border border-white/10 px-5 py-4 text-xl outline-none focus:bg-white/15 focus:border-white/60">
             Reiniciar la interfaz
           </button>
+          {!state.owner && (
+            <button data-index="2" onClick={() => void openAndroidSettings()} className="w-full text-left rounded-xl bg-white/5 border border-white/10 px-5 py-4 text-xl outline-none focus:bg-white/15 focus:border-white/60">
+              Abrir Ajustes de Android (10 min)
+            </button>
+          )}
+          {message && <p role="status" className="text-lg text-amber-100">{message}</p>}
           <p className="text-white/40 text-base leading-relaxed">
             Desvincular el equipo o reiniciar el sistema se hacen desde el panel de tu empresa. El soporte de NEX también
             puede ayudarte de forma remota.
@@ -480,7 +566,7 @@ function SettingsScreen({ state, appearance, setAppearance, onClose }: {
           <SettingsRow label="Nombre" value={state.deviceName ?? 'Sin nombre'} />
           <SettingsRow label="Estado" value={<span className="text-emerald-300">Vinculado</span>} />
           <SettingsRow label="Proveedor" value={state.companyName ?? 'NEX'} />
-          <SettingsRow label="NEX-OS" value={`v${NEX_VERSION}`} />
+          <SettingsRow label="NEX TV" value={`v${NEX_VERSION}`} />
         </section>
 
         <section>
@@ -489,9 +575,7 @@ function SettingsScreen({ state, appearance, setAppearance, onClose }: {
             label="Conexión"
             value={<span className={online ? 'text-emerald-300' : 'text-amber-300'}>{online ? 'Conectado' : 'Sin conexión'}</span>}
           />
-          <p className="text-white/40 text-base mt-4 leading-relaxed">
-            La red la administra tu proveedor. Para cambiar el Wi-Fi, comunicate con soporte.
-          </p>
+          <WifiEntry state={state} label="Cambiar red Wi-Fi" />
         </section>
 
         <section className="col-span-2">
@@ -510,7 +594,7 @@ function SettingsScreen({ state, appearance, setAppearance, onClose }: {
   );
 }
 
-const SETTINGS_ITEM: MdmApp = { id: 'ajustes', name: 'Ajustes', kind: 'internal', launch_url: null };
+const SETTINGS_ITEM: MdmApp = { id: 'ajustes', name: 'Ajustes', kind: 'internal', launch_url: null, icon: null };
 
 function TvHome({ state }: { state: MdmState }) {
   const clock = useClock();

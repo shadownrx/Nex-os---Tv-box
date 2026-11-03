@@ -12,10 +12,17 @@ export interface MdmApp {
   name: string;
   kind: 'web' | 'internal';
   launch_url: string | null;
+  /** Ícono real de una app Android, servido por el agente. null: la UI dibuja uno de línea. */
+  icon: string | null;
 }
 
 export interface MdmState {
   mode: MdmMode;
+  wifiToken: string | null;
+  /** false: NEX todavía no es dueño del equipo (instalación incompleta). */
+  owner: boolean;
+  /** El equipo tiene root: el técnico puede activar NEX desde la TV. */
+  root: boolean;
   logo: string | null;
   companyName: string | null;
   deviceName: string | null;
@@ -38,6 +45,9 @@ const LOCK_KINDS: readonly MdmLockKind[] = ['manual', 'payment', 'clock', 'offli
 
 const STARTING: MdmState = {
   mode: 'starting',
+  wifiToken: null,
+  owner: true,
+  root: false,
   logo: null,
   companyName: null,
   deviceName: null,
@@ -70,7 +80,9 @@ function parseApp(v: unknown): MdmApp | null {
       return null;
     }
   }
-  return { id, name, kind: o.kind, launch_url: launchUrl };
+  // Solo la ruta local del agente: por este campo la UI no carga imágenes de afuera.
+  const icon = typeof o.icon === 'string' && /^\/agent\/icon\/[\w.]+$/.test(o.icon) ? o.icon : null;
+  return { id, name, kind: o.kind, launch_url: launchUrl, icon };
 }
 
 /** Valida todo lo que llega del archivo: ante cualquier duda, 'starting' (pantalla de espera). */
@@ -83,6 +95,10 @@ export function parseAgentState(raw: unknown): MdmState {
   const lockKind = LOCK_KINDS.find((k) => k === o.lock_kind) ?? null;
   return {
     mode,
+    wifiToken: str(o.wifi_token, 64),
+    // El agente de Linux no publica "owner": ahí no aplica.
+    owner: o.owner !== false,
+    root: o.root === true,
     logo: logo && /^\/agent\/logo\.(png|jpg|webp)$/.test(logo) ? logo : null,
     companyName: str(o.company_name, 80),
     deviceName: str(o.device_name, 80),

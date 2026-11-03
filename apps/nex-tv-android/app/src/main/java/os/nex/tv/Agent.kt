@@ -53,8 +53,11 @@ object Agent {
     private val demoStateFile get() = File(dir, "demo_state")
     val logoDir: File get() = File(dir, "branding")
 
+    val wifiToken: String = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        .joinToString("") { "%02x".format(it.toInt() and 255) }
+
     /** Estado publicado para la UI (/agent/ui-state.json). */
-    @Volatile var uiState: String = JSONObject().put("mode", "starting").toString()
+    @Volatile var uiState: String = JSONObject().put("mode", "starting").put("wifi_token", wifiToken).toString()
         private set
     @Volatile var mode: String = "starting"
         private set
@@ -75,6 +78,7 @@ object Agent {
         if (::app.isInitialized) return
         app = context.applicationContext
         dir = File(app.filesDir, "agent").apply { mkdirs() }
+        Updater.start(app)
         Thread(::main, "nex-agent").apply { isDaemon = true }.start()
     }
 
@@ -227,7 +231,8 @@ object Agent {
             when (status) {
                 "unpaired" -> {}
                 "paired" -> {
-                    resp = rpc("mdm_device_sync", JSONObject().put("p_firmware", firmware())) ?: return false
+                    resp = rpc("mdm_device_sync", JSONObject().put("p_firmware", firmware())
+                        .put("p_status", statusJson())) ?: return false
                     status = resp.optString("status")
                 }
                 else -> return false
@@ -255,6 +260,7 @@ object Agent {
             }
         }
 
+        Updater.offer(app, resp.optJSONObject("update"))
         lastSyncFile.writeAtomic(now().toString())
         val ep = resp.opt("server_epoch")
         if (ep is Number && ep.toLong() > 0) serverEpochFile.writeAtomic(ep.toLong().toString())
@@ -368,24 +374,25 @@ object Agent {
         val logo = currentLogo()?.name
         val apps = JSONArray()
         if (mode == "active") {
-            val src = cfg.optJSONArray("apps") ?: JSONArray()
-            for (i in 0 until src.length()) {
-                val a = src.optJSONObject(i) ?: continue
-                apps.put(JSONObject()
-                    .put("id", a.opt("id")).put("name", a.opt("name"))
-                    .put("kind", a.opt("kind")).put("launch_url", a.opt("launch_url")))
-            }
-            // Play Store y apps instaladas por el usuario. Viajan como "web" con una URL del origen
-            // local que UiServer convierte en "abrir la app": la UI no necesita cambios.
+            // Solo las apps Android (Play Store y las instaladas), con su ícono real. Las web del catálogo de la
+            // empresa no se muestran: el WebView no tiene Widevine y no reproduce Netflix, Disney+, Prime Video
+            // ni Spotify (la versión Linux sí las muestra). Viajan como "web" con una URL del origen local que
+            // UiServer convierte en "abrir la app".
             for (a in AndroidApps.list(app)) {
                 apps.put(JSONObject()
                     .put("id", "android:${a.pkg}".take(41)).put("name", a.label.take(60))
-                    .put("kind", "web").put("launch_url", "${UiServer.ORIGIN}${AndroidApps.LAUNCH_PREFIX}${a.pkg}"))
+                    .put("kind", "web").put("launch_url", "${UiServer.ORIGIN}${AndroidApps.LAUNCH_PREFIX}${a.pkg}")
+                    .put("icon", "${AndroidApps.ICON_PREFIX}${a.pkg}"))
             }
         }
-        // Nunca se publica el token ni la configuración cruda.
+        // Nunca se publica el token del MDM ni la configuración cruda.
+        val owner = Kiosk.isOwner(app)
         uiState = JSONObject()
+            .put("wifi_token", wifiToken)
             .put("mode", mode)
+            // Sin Device Owner la UI ofrece al técnico activarlo con root (si el equipo lo tiene).
+            .put("owner", owner)
+            .put("root", !owner && Provision.hasRoot())
             .put("updated_at", now())
             .put("logo", logo?.let { "/agent/$it" } ?: JSONObject.NULL)
             .put("company_name", company.opt("name") ?: JSONObject.NULL)
@@ -449,6 +456,8 @@ object Agent {
             .put("firewall", false)
             .put("webview_filter", true)
             .put("platform", "android")
+            .put("build", BuildConfig.VERSION_CODE)
+            .put("version", BuildConfig.VERSION_NAME)
             .put("uptime", SystemClock.elapsedRealtime() / 1000)
             .put("free_mb", app.filesDir.usableSpace / (1024 * 1024))
             .put("agent", AGENT_VERSION)
@@ -483,7 +492,7 @@ object Agent {
     // ---- Cola de eventos (se conserva sin internet) ----
 
     @Synchronized
-    private fun addEvent(kind: String, details: JSONObject = JSONObject()) {
+    internal fun addEvent(kind: String, details: JSONObject = JSONObject()) {
         val line = JSONObject().put("kind", kind).put("at", now()).put("details", details).toString()
         val lines = (eventsFile.readOrNull()?.lines()?.filter { it.isNotBlank() } ?: emptyList()) + line
         eventsFile.writeAtomic(lines.takeLast(100).joinToString("\n", postfix = "\n"))
