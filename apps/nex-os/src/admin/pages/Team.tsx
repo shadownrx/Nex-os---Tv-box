@@ -1,10 +1,34 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Ban, Copy, KeyRound, Plug, ScrollText, TriangleAlert, UserPlus, Users } from 'lucide-react';
-import { db, inviteMember, run, type ApiKey, type AuditEntry, type Company, type Member, type NewApiKey } from '../api';
+import { Ban, Copy, KeyRound, Link2, MessageCircle, Plug, RefreshCw, ScrollText, TriangleAlert, UserPlus, Users } from 'lucide-react';
+import { db, inviteMember, resendAccess, run, type ApiKey, type AuditEntry, type Company, type Member, type NewApiKey } from '../api';
 import { AUDIT_LABELS, copyText, formatDate, relativeTime } from '../format';
 import { useStepUp } from '../stepUp';
 import { useToast } from '../toast';
 import { Badge, Button, Card, EmptyState, ErrorText, Field, IconButton, inputClass, Modal, PageHeader, Skeleton, Callout } from '../ui';
+
+/** Link de acceso recién generado: se manda por WhatsApp o se copia. Vence como cualquier link de Supabase. */
+type AccessLink = { email: string; link: string; kind: 'invite' | 'recovery' };
+
+function AccessLinkCard({ access, company, onClose }: { access: AccessLink; company: string; onClose: () => void }) {
+  const toast = useToast();
+  const message = access.kind === 'invite'
+    ? `Hola! Te invitamos al panel de ${company} en NEX TV. Entrá a este link para definir tu contraseña y activar el segundo factor: ${access.link}`
+    : `Hola! Este es tu link para definir una contraseña nueva en el panel de NEX TV: ${access.link}`;
+  return (
+    <Callout tone="success" icon={Link2} title={`Link de acceso para ${access.email}`} className="xl:col-span-5">
+      <p>Mandáselo por WhatsApp o copialo. Es personal: sirve una sola vez y vence en unas horas.</p>
+      <input readOnly value={access.link} onFocus={(e) => e.currentTarget.select()} aria-label="Link de acceso" className={`${inputClass} mt-2 font-mono text-xs`} />
+      <div className="mt-2 flex flex-wrap gap-2">
+        <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noopener noreferrer"
+          className="nx-btn-sm inline-flex items-center rounded-lg bg-ok-strong font-medium text-white shadow-card transition hover:brightness-110">
+          <MessageCircle className="h-3.5 w-3.5" aria-hidden /> Mandar por WhatsApp
+        </a>
+        <Button size="sm" variant="secondary" icon={Copy} onClick={async () => toast.show((await copyText(access.link)) ? 'Link copiado' : 'No se pudo copiar: seleccionalo a mano')}>Copiar link</Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>Listo</Button>
+      </div>
+    </Callout>
+  );
+}
 
 export function MembersPage({ company }: { company: Company }) {
   const toast = useToast();
@@ -15,13 +39,17 @@ export function MembersPage({ company }: { company: Company }) {
   const [tick, setTick] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [access, setAccess] = useState<AccessLink | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    run<Member[]>(db().from('mdm_members').select('user_id, role').eq('company_id', company.id)).then(
-      (m) => !cancelled && setMembers(m),
-      (err: Error) => !cancelled && setError(err.message),
-    );
+    // v16: con email y si ya entró. Si el servidor todavía no tiene v16, solo IDs.
+    run<Member[]>(db().rpc('mdm_list_members', { p_company: company.id }))
+      .catch(() => run<Member[]>(db().from('mdm_members').select('user_id, role').eq('company_id', company.id)))
+      .then(
+        (m) => !cancelled && setMembers(m),
+        (err: Error) => !cancelled && setError(err.message),
+      );
     return () => {
       cancelled = true;
     };
@@ -30,12 +58,14 @@ export function MembersPage({ company }: { company: Company }) {
   const setMember = async (r: string | null) => {
     setBusy(true);
     setError(null);
+    setAccess(null);
     try {
       const address = email.trim().toLowerCase();
       if (r === 'admin' || r === 'owner') {
-        const { invited } = await stepUp.guard(() => inviteMember(company.id, address, r));
+        const { invited, link } = await stepUp.guard(() => inviteMember(company.id, address, r));
+        if (link) setAccess({ email: address, link, kind: 'invite' });
         toast.show(invited
-          ? `Le mandamos una invitación a ${address}: define su contraseña desde el link del email`
+          ? link ? `${address} invitado: mandale el link de acceso` : `Le mandamos una invitación a ${address}: define su contraseña desde el link del email`
           : `${address} ahora es ${r === 'owner' ? 'dueño' : 'admin'}`);
       } else {
         await stepUp.guard(() => run(db().rpc('mdm_set_member', { p_company: company.id, p_email: address, p_role: null })));
@@ -50,10 +80,26 @@ export function MembersPage({ company }: { company: Company }) {
     }
   };
 
+  const resend = async (address: string) => {
+    setBusy(true);
+    setError(null);
+    setAccess(null);
+    try {
+      const { sent, link } = await stepUp.guard(() => resendAccess(address));
+      if (link) setAccess({ email: address, link, kind: sent });
+      else toast.show(`Le mandamos a ${address} un email con su acceso`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeader title="Miembros" subtitle="Quiénes administran los equipos de la empresa" />
       <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-5">
+        {access && <AccessLinkCard access={access} company={company.name} onClose={() => setAccess(null)} />}
         <Card title="Con acceso" className="xl:col-span-3" padded={false}>
           {!members ? (
             <div className="flex flex-col gap-2 p-4 sm:p-5">{[0, 1].map((i) => <Skeleton key={i} className="h-10" />)}</div>
@@ -64,16 +110,20 @@ export function MembersPage({ company }: { company: Company }) {
               {members.map((m) => (
                 <li key={m.user_id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent ring-1 ring-inset ring-accent" aria-hidden>
-                    {m.user_id.slice(0, 2).toUpperCase()}
+                    {(m.email ?? m.user_id).slice(0, 2).toUpperCase()}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg-3" title={m.user_id}>{m.user_id}</span>
+                  <span className={`min-w-0 flex-1 truncate ${m.email ? 'text-sm text-fg' : 'font-mono text-xs text-fg-3'}`} title={m.email ?? m.user_id}>{m.email ?? m.user_id}</span>
+                  {m.pending && <Badge tone="warning">Sin entrar</Badge>}
                   <Badge tone={m.role === 'owner' ? 'info' : 'neutral'}>{m.role === 'owner' ? 'Dueño' : 'Admin'}</Badge>
+                  {m.email && (
+                    <IconButton icon={RefreshCw} label={m.pending ? `Nuevo link de invitación para ${m.email}` : `Link de contraseña nueva para ${m.email}`} disabled={busy} onClick={() => resend(m.email!)} />
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </Card>
-        <Card title="Invitar o cambiar rol" description="Si la persona no tiene cuenta, le llega un email para definir su contraseña y activar el segundo factor. Nadie tiene que pasarle una contraseña." className="xl:col-span-2">
+        <Card title="Invitar o cambiar rol" description="Si la persona no tiene cuenta, se genera un link para que defina su contraseña y active el segundo factor. Nadie tiene que pasarle una contraseña." className="xl:col-span-2">
           <div className="flex flex-col gap-4">
             <Field label="Email">
               <input className={inputClass} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tecnico@empresa.com" />

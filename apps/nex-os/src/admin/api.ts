@@ -325,6 +325,9 @@ export interface FirmwareTarget {
 export interface Member {
   user_id: string;
   role: 'owner' | 'admin';
+  /** v16 (mdm_list_members): email y si todavía no entró nunca. */
+  email?: string | null;
+  pending?: boolean;
 }
 
 export interface AuditEntry {
@@ -433,12 +436,26 @@ export function addDays(isoDate: string, days: number): string {
  * Invita (o suma, si ya tiene cuenta) a un miembro por email con la Edge Function mdm-invite (schema-mdm-v14.sql).
  * Los errores llegan con el código de Postgres: P0401 hace que el panel pida el segundo factor y reintente.
  */
-export async function inviteMember(company: string, email: string, role: 'admin' | 'owner'): Promise<{ invited: boolean }> {
-  const { data, error } = await db().functions.invoke<{ invited: boolean }>('mdm-invite', { body: { company, email, role } });
-  if (error) {
-    const ctx = (error as { context?: Response }).context;
-    const body = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
-    throw new ApiError(body?.message ?? 'No se pudo invitar. Probá de nuevo en unos minutos.', body?.code);
-  }
+/** Error de una Edge Function con el mensaje del cuerpo, si lo hay. */
+async function functionError(error: unknown, fallback: string): Promise<ApiError> {
+  const ctx = (error as { context?: Response }).context;
+  const body = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
+  return new ApiError(body?.message ?? fallback, body?.code);
+}
+
+/**
+ * Invita a un miembro (o le cambia el rol). Sin SMTP (MDM_AUTH_DELIVERY=link) no sale ningún email: la respuesta
+ * trae `link`, que el panel muestra para copiarlo o mandarlo por WhatsApp.
+ */
+export async function inviteMember(company: string, email: string, role: 'admin' | 'owner'): Promise<{ invited: boolean; link?: string }> {
+  const { data, error } = await db().functions.invoke<{ invited: boolean; link?: string }>('mdm-invite', { body: { company, email, role } });
+  if (error) throw await functionError(error, 'No se pudo invitar. Probá de nuevo en unos minutos.');
   return data ?? { invited: false };
+}
+
+/** Nuevo link de acceso: invitación si nunca entró, contraseña nueva si ya tenía cuenta. */
+export async function resendAccess(email: string): Promise<{ sent: 'invite' | 'recovery'; link?: string }> {
+  const { data, error } = await db().functions.invoke<{ sent: 'invite' | 'recovery'; link?: string }>('mdm-invite', { body: { kind: 'resend', email } });
+  if (error || !data) throw await functionError(error, 'No se pudo generar el acceso. Probá de nuevo en unos minutos.');
+  return data;
 }
